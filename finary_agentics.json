@@ -1,0 +1,804 @@
+{
+  "name": "Finary - Single Email Demo + KB + GPT + Merge + Full Email Content v7",
+  "nodes": [
+    {
+      "parameters": {
+        "path": "finary-single-email-demo-gpt-merge-v7",
+        "httpMethod": "POST",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "1",
+      "name": "Webhook Upload Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        120,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Setup\n1. In `Draft Reply with GPT`, select your OpenAI credential.\n2. In the 3 email nodes, select your SMTP/Gmail/Outlook credential.\n3. This demo processes only one email row.\n4. Emails are prefilled to:\n- From: yann@nomiks.io\n- To: yann.mastin@gmail.com\n5. The validator receives the exact client draft first. After approval, the same draft is sent to the client mock email.",
+        "height": 300,
+        "width": 430
+      },
+      "id": "note1",
+      "name": "Note - Setup",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        120,
+        80
+      ]
+    },
+    {
+      "parameters": {
+        "operation": "readFromFile",
+        "inputBinaryField": "data",
+        "options": {}
+      },
+      "id": "2",
+      "name": "Excel Binary to JSON",
+      "type": "n8n-nodes-base.spreadsheetFile",
+      "typeVersion": 1,
+      "position": [
+        360,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function norm(x) {\n  if (x === null || x === undefined) return \"\";\n  return String(x).trim();\n}\n\nreturn items.map((item, idx) => {\n  const j = item.json;\n\n  j.mock_mailbox = \"yann.mastin@gmail.com\";\n  j.human_validator_email = \"yann.mastin@gmail.com\";\n  j.sender_email = \"yann@nomiks.io\";\n\n  j.ticket_id = norm(j.ticket_id) || `ticket_${idx + 1}`;\n  j.channel = norm(j.channel);\n  j.customer_email = norm(j.customer_email) || \"unknown_customer@example.com\";\n  j.subscription_tier = norm(j.subscription_tier);\n  j.category = norm(j.category);\n  j.subcategory = norm(j.subcategory);\n  j.priority = norm(j.priority);\n  j.subject = norm(j.subject);\n  j.description = norm(j.description);\n  j.status = norm(j.status);\n  j.tags = norm(j.tags);\n  j.escalated_to_product = norm(j.escalated_to_product);\n\n  j.first_response_time_min_num = Number(j.first_response_time_min || j.first_response_time || 0);\n  j.resolution_time_hours_num = Number(j.resolution_time_hours || j.resolution_time || 0);\n  j.csat_num = (j.csat === \"\" || j.csat === null || j.csat === undefined) ? null : Number(j.csat);\n\n  j.channel_normalized = j.channel.toLowerCase();\n  j.priority_normalized = j.priority.toLowerCase();\n  j.status_normalized = j.status.toLowerCase();\n  j.subscription_tier_normalized = j.subscription_tier.toLowerCase();\n\n  j.tags_list = j.tags.split(\",\").map(x => x.trim()).filter(Boolean);\n\n  j.evidence_text = [\n    j.ticket_id,\n    j.channel,\n    j.subscription_tier,\n    j.category,\n    j.subcategory,\n    j.priority,\n    j.subject,\n    j.description,\n    j.status,\n    j.tags\n  ].join(\" | \").toLowerCase();\n\n  return { json: j };\n});"
+      },
+      "id": "3",
+      "name": "Normalize Rows",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        600,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.channel_normalized }}",
+              "operation": "equal",
+              "value2": "email"
+            }
+          ]
+        }
+      },
+      "id": "4",
+      "name": "IF Channel is Email",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        840,
+        420
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n  j.workflow_scope = \"excluded_non_email\";\n  j.route_queue = \"excluded_from_email_workflow\";\n  j.route_owner = \"N/A\";\n  j.routing_reason = \"Non-email ticket excluded from email response workflow.\";\n  j.validation_required = false;\n  j.known_case = false;\n  j.mock_delivery_status = \"not_processed\";\n  return { json: j };\n});"
+      },
+      "id": "5",
+      "name": "Mark Non-Email Excluded",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        620
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const targetSubject = \"trade republic connection broken for a month\";\n\nif (!items.length) return items;\n\nlet chosen = items.find(item => {\n  const s = String(item.json.subject || \"\").trim().toLowerCase();\n  return s === targetSubject;\n});\n\nif (!chosen) chosen = items[0];\n\nchosen.json.demo_selected = true;\nchosen.json.demo_selection_reason = chosen.json.subject\n  ? `Selected for single-email GPT demo: ${chosen.json.subject}`\n  : \"Selected as first available email row for single-email GPT demo.\";\n\nreturn [chosen];"
+      },
+      "id": "6",
+      "name": "Select Single Demo Email",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1080,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const OPPORTUNITY_RULES = [\n  {name: \"Account sync reliability\", owner: \"Engineering + Product\", issue_family: \"bank_sync_reliability\", patterns: [/trade republic/i,/bank[\\s_-]?sync/i,/aggregation/i,/aggregator/i,/connect(ion|ed|ing)?\\s+bank/i,/account\\s+disconnect/i,/missing\\s+transaction/i,/balance\\s+(wrong|mismatch|incorrect|stale)/i,/reconnect/i,/sync\\s+fail/i,/sync\\s+issue/i,/account\\s+sync/i,/bank\\s+connection/i]},\n  {name: \"Billing and subscription clarity\", owner: \"Product + Ops\", issue_family: \"billing_subscription\", patterns: [/billing/i,/subscription/i,/charged/i,/charge/i,/refund/i,/cancel/i,/cancellation/i,/invoice/i,/payment\\s+method/i,/plan/i,/renewal/i,/trial/i,/pricing/i]},\n  {name: \"Finary One service delivery and SLA\", owner: \"Ops + Product\", issue_family: \"premium_service_sla\", patterns: [/finary\\s+one/i,/advisor/i,/wealth/i,/premium/i,/appointment/i,/meeting/i,/call\\s+back/i,/service\\s+delay/i,/sla/i,/onboarding/i,/portfolio\\s+review/i,/private\\s+client/i]},\n  {name: \"Product bug stability\", owner: \"Engineering\", issue_family: \"product_bug\", patterns: [/bug/i,/crash/i,/error/i,/not\\s+working/i,/doesn'?t\\s+work/i,/broken/i,/freeze/i,/loading/i,/display\\s+issue/i,/wrong\\s+value/i,/duplicate/i,/issue\\s+in\\s+app/i,/problem\\s+in\\s+app/i]}\n];\nfunction classify(text) {\n  const matches = [];\n  for (const rule of OPPORTUNITY_RULES) {\n    const hits = rule.patterns.filter(p => p.test(text));\n    if (hits.length > 0) matches.push({name: rule.name, owner: rule.owner, issue_family: rule.issue_family, hit_count: hits.length, matched_patterns: hits.map(x => x.toString())});\n  }\n  if (!matches.length) return {opportunity_name: \"Other / uncategorized\", issue_family: \"uncategorized\", owner: \"Ops\", rule_strength: 0, matched_patterns: []};\n  matches.sort((a,b) => b.hit_count - a.hit_count);\n  return {opportunity_name: matches[0].name, issue_family: matches[0].issue_family, owner: matches[0].owner, rule_strength: matches[0].hit_count, matched_patterns: matches[0].matched_patterns};\n}\nreturn items.map(item => {\n  const j = item.json;\n  Object.assign(j, classify(j.evidence_text || \"\"));\n  return { json: j };\n});"
+      },
+      "id": "7",
+      "name": "Classify Opportunity",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1320,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function hasAny(text, patterns) { return patterns.some(p => new RegExp(p, \"i\").test(text || \"\")); }\n\nreturn items.map(item => {\n  const j = item.json;\n  const text = j.evidence_text || \"\";\n  const premiumTiers = [\"plus\",\"premium\",\"gold\",\"finary one\",\"one\",\"pro\",\"private\",\"finary plus\"];\n  const highPriorities = [\"high\",\"urgent\",\"p1\",\"critical\"];\n  const openStatuses = [\"open\",\"pending\",\"waiting\",\"in progress\",\"new\"];\n\n  j.is_premium = premiumTiers.includes(j.subscription_tier_normalized || \"\");\n  j.is_high_priority = highPriorities.includes(j.priority_normalized || \"\");\n  j.is_open = openStatuses.includes(j.status_normalized || \"\");\n  j.is_escalated_product = [\"true\",\"yes\",\"1\",\"y\"].includes(String(j.escalated_to_product || \"\").toLowerCase());\n\n  let severityProxy = 0;\n  if (j.is_high_priority) severityProxy += 2;\n  if (j.is_open) severityProxy += 1.5;\n  if (j.is_escalated_product) severityProxy += 1.5;\n  if (j.csat_num !== null && j.csat_num <= 2) severityProxy += 2;\n  else if (j.csat_num === 3) severityProxy += 1;\n  if ((j.resolution_time_hours_num || 0) >= 72) severityProxy += 2;\n  else if ((j.resolution_time_hours_num || 0) >= 24) severityProxy += 1;\n  if ((j.first_response_time_min_num || 0) >= 1440) severityProxy += 2;\n  else if ((j.first_response_time_min_num || 0) >= 240) severityProxy += 1;\n\n  let viralityRisk = 0;\n  if (hasAny(text, [\"scam\",\"unacceptable\",\"ridiculous\",\"angry\",\"furious\",\"terrible\",\"awful\",\"complain\",\"twitter\",\"linkedin\",\"social\",\"public\",\"frustrat\",\"annoy\",\"disappointed\",\"trust\",\"urgent\",\"immediately\"])) viralityRisk += 2;\n  if (hasAny(text, [\"cancel\",\"subscription\",\"paying\",\"value\"])) viralityRisk += 1;\n\n  let trustRisk = 0;\n  if (hasAny(text, [\"money\",\"balance\",\"net worth\",\"portfolio\",\"charged\",\"refund\",\"missing transaction\",\"bank\",\"security\",\"access\",\"hacked\"])) trustRisk += 2;\n\n  j.severity_proxy = Number(severityProxy.toFixed(2));\n  j.virality_risk = Math.min(viralityRisk, 5);\n  j.trust_risk = Math.min(trustRisk, 5);\n\n  return { json: j };\n});"
+      },
+      "id": "8",
+      "name": "Build Ticket Scores",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1560,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const institutionCriticality = {\"trade republic\": 2, \"boursorama\": 1, \"binance\": 2, \"coinbase\": 2};\n\nfunction detectInstitution(text) {\n  const lower = (text || \"\").toLowerCase();\n  for (const key of Object.keys(institutionCriticality)) if (lower.includes(key)) return key;\n  return \"\";\n}\n\nreturn items.map(item => {\n  const j = item.json;\n  const inst = detectInstitution(j.evidence_text || \"\");\n  const instScore = inst ? institutionCriticality[inst] : 0;\n\n  j.detected_institution = inst || \"not_detected\";\n  j.ticket_priority_score = Number(((j.rule_strength || 0) * 1.0 + (j.severity_proxy || 0) * 1.5 + (j.is_premium ? 2 : 0) + (j.virality_risk || 0) * 1.0 + (j.trust_risk || 0) * 1.0 + (j.is_escalated_product ? 2 : 0) + ((j.resolution_time_hours_num || 0) >= 24 ? 1 : 0) + ((j.first_response_time_min_num || 0) >= 240 ? 1 : 0) + instScore).toFixed(2));\n\n  const isSyncCritical = j.issue_family === \"bank_sync_reliability\" && [\"trade republic\",\"coinbase\",\"binance\"].includes(j.detected_institution);\n  const isPremiumCritical = j.is_premium && j.ticket_priority_score >= 7;\n  const isProductCritical = j.is_escalated_product || j.ticket_priority_score >= 9;\n\n  if (isSyncCritical || isPremiumCritical || isProductCritical) {\n    j.route_queue = \"tier_1_internal_priority\";\n    j.route_owner = j.owner || \"Engineering + Product\";\n    j.sla_target = \"same_day\";\n  } else if (j.ticket_priority_score >= 5) {\n    j.route_queue = \"tier_2_specialist_queue\";\n    j.route_owner = j.owner || \"Ops\";\n    j.sla_target = \"24h\";\n  } else {\n    j.route_queue = \"tier_3_self_serve_or_backlog\";\n    j.route_owner = \"Ops\";\n    j.sla_target = \"72h\";\n  }\n\n  j.routing_reason = j.route_queue === \"tier_1_internal_priority\"\n    ? \"Trust-critical, premium-exposed, institution-critical, or escalated case.\"\n    : j.route_queue === \"tier_2_specialist_queue\"\n      ? \"Moderate complexity requiring specialist review.\"\n      : \"Low complexity / self-serve or backlog candidate.\";\n\n  return { json: j };\n});"
+      },
+      "id": "9",
+      "name": "Compute Routing Score",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1800,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const KNOWLEDGE_BASE = [\n  {kb_id: \"KB-001\", issue_family: \"bank_sync_reliability\", institution: \"trade republic\", known_case: true, approved_product_notes: \"Trade Republic sync reliability is treated as a top-priority reliability topic. Acknowledge the issue early, avoid ETAs, and explain that recurring reliability improvements are being prioritized.\", approved_customer_guidance: \"Apologize first, validate the frustration, state that the issue is top priority, explain that product reliability work is ongoing, and avoid inventing a timeline.\"},\n  {kb_id: \"KB-002\", issue_family: \"billing_subscription\", institution: \"generic\", known_case: true, approved_product_notes: \"Billing confusion should be explained clearly and calmly. Focus on clarity, perceived value, and the next step. Avoid defensive language.\", approved_customer_guidance: \"Acknowledge the confusion, explain the billing event, and reassure without overclaiming.\"}\n];\n\nfunction matchKB(issueFamily, institution) {\n  const direct = KNOWLEDGE_BASE.find(x => x.issue_family === issueFamily && x.institution === institution);\n  if (direct) return direct;\n  const generic = KNOWLEDGE_BASE.find(x => x.issue_family === issueFamily && x.institution === \"generic\");\n  if (generic) return generic;\n  return null;\n}\n\nreturn items.map(item => {\n  const j = item.json;\n  const institution = j.detected_institution || \"generic\";\n  const kbMatch = matchKB(j.issue_family, institution);\n\n  j.kb_match_found = Boolean(kbMatch);\n  j.kb_id = kbMatch ? kbMatch.kb_id : \"\";\n  j.known_case = Boolean(kbMatch && kbMatch.known_case);\n  j.approved_product_notes = kbMatch ? kbMatch.approved_product_notes : \"No known case found in the internal knowledge base. Keep the reply careful, honest, and focused on the next step.\";\n  j.approved_customer_guidance = kbMatch ? kbMatch.approved_customer_guidance : \"This appears to be a new case. A human validator must review the draft before final delivery.\";\n  j.validation_required = !j.known_case;\n\n  return { json: j };\n});"
+      },
+      "id": "10",
+      "name": "Query Fake Knowledge Base",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2040,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n  j.gpt_prompt = `You are drafting a customer support reply.\n\nUse this structure:\n1. apologize first\n2. validate the customer’s frustration\n3. address the main issue immediately\n4. provide product perspective\n5. explain what is being done\n6. reassure without overpromising\n7. connect the issue to broader product reliability when relevant\n\nConstraints:\n- do not invent ETAs\n- do not claim fixes are shipped unless explicitly stated\n- keep the tone human and concise\n- if the issue is Trade Republic sync reliability, state that it is treated as a top-priority reliability topic\n\nContext:\nticket_id: ${j.ticket_id}\ncustomer_email: ${j.customer_email}\nsubscription_tier: ${j.subscription_tier}\ncategory: ${j.category}\nsubcategory: ${j.subcategory}\npriority: ${j.priority}\nstatus: ${j.status}\nsubject: ${j.subject}\ndescription: ${j.description}\ntags: ${j.tags}\nissue_family: ${j.issue_family}\nrouting_score: ${j.ticket_priority_score}\nroute_queue: ${j.route_queue}\nroute_owner: ${j.route_owner}\nrouting_reason: ${j.routing_reason}\ninstitution: ${j.detected_institution}\nknowledge_base_match: ${j.kb_match_found}\nknowledge_base_id: ${j.kb_id}\napproved_product_notes: ${j.approved_product_notes}\napproved_customer_guidance: ${j.approved_customer_guidance}\n\nOutput JSON only with:\nreply_subject, reply_body, internal_summary`;\n  return { json: j };\n});"
+      },
+      "id": "11",
+      "name": "Build GPT Prompt",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2280,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  item.json.openai_payload = {\n    model: \"gpt-4o\",\n    instructions: \"You are a careful customer support drafting assistant. Follow the prompt strictly and return valid JSON only.\",\n    input: item.json.gpt_prompt,\n    text: { format: { type: \"json_object\" } }\n  };\n  return item;\n});"
+      },
+      "id": "12",
+      "name": "Build OpenAI Payload",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2520,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "content": "## Credentials\n- In `Draft Reply with GPT`, choose your OpenAI credential.\n- In all 3 email nodes, choose your email credential.\n- Emails are already prefilled with From/To and full draft content.",
+        "height": 180,
+        "width": 320
+      },
+      "id": "note2",
+      "name": "Note - Credentials",
+      "type": "n8n-nodes-base.stickyNote",
+      "typeVersion": 1,
+      "position": [
+        2520,
+        20
+      ]
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.openai.com/v1/responses",
+        "authentication": "predefinedCredentialType",
+        "nodeCredentialType": "openAiApi",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ $json.openai_payload }}",
+        "options": {}
+      },
+      "id": "13",
+      "name": "Draft Reply with GPT",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4,
+      "position": [
+        2760,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "mode": "combine",
+        "combineBy": "combineByPosition",
+        "numberInputs": 2,
+        "options": {
+          "includeUnpaired": true
+        }
+      },
+      "id": "14m",
+      "name": "Merge Original + GPT Response",
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3,
+      "position": [
+        3000,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "function safeFallback(j) {\n  const subjectPrefix =\n    j.route_queue === \"tier_1_internal_priority\"\n      ? \"[PRIORITY]\"\n      : j.route_queue === \"tier_2_specialist_queue\"\n        ? \"[SPECIALIST]\"\n        : \"[STANDARD]\";\n\n  return {\n    reply_subject: `${subjectPrefix} Re: ${j.subject || \"Your request\"}`,\n    reply_body: [\n      \"Hi,\",\n      \"\",\n      \"First of all, I’m sorry for the experience here.\",\n      \"\",\n      \"I completely understand why this is frustrating.\",\n      \"\",\n      \"We’ve reviewed your case and routed it to the appropriate team based on the issue type and impact.\",\n      \"\",\n      \"We want to be transparent: we’ll keep the case moving, but we do not want to overpromise on timing until we have a confirmed update.\",\n      \"\",\n      \"Thanks again for raising this — your feedback helps us improve both the immediate handling of the issue and the broader product experience behind it.\",\n      \"\",\n      \"Best,\",\n      \"Finary Support\"\n    ].join(\"\\n\"),\n    internal_summary: `Fallback draft used. Ticket=${j.ticket_id}. Issue family=${j.issue_family}. Queue=${j.route_queue}.`\n  };\n}\n\nfunction extractOpenAIText(j) {\n  if (typeof j.output_text === \"string\" && j.output_text.trim()) return j.output_text;\n  const outputs = j.output || [];\n  for (const out of outputs) {\n    const contents = out.content || [];\n    for (const c of contents) {\n      if (typeof c.text === \"string\" && c.text.trim()) return c.text;\n    }\n  }\n  return \"\";\n}\n\nreturn items.map(item => {\n  const j = item.json;\n  const rawText = extractOpenAIText(j);\n\n  let parsed = null;\n  try {\n    if (rawText) parsed = JSON.parse(rawText);\n  } catch (e) {}\n\n  const fallback = safeFallback(j);\n  const finalDraft = parsed || fallback;\n\n  j.reply_subject = finalDraft.reply_subject || fallback.reply_subject;\n  j.reply_body = finalDraft.reply_body || fallback.reply_body;\n  j.internal_summary = finalDraft.internal_summary || fallback.internal_summary;\n\n  j.validator_email_body = [\n    \"Please review the customer draft below before final delivery.\",\n    \"\",\n    `Ticket ID: ${j.ticket_id || 'N/A'}`,\n    `Customer: ${j.customer_email || 'N/A'}`,\n    `Issue family: ${j.issue_family || 'N/A'}`,\n    `Route: ${j.route_queue || 'N/A'}`,\n    `Known case: ${j.known_case || false}`,\n    \"\",\n    \"--- EMAIL TO CUSTOMER ---\",\n    \"\",\n    `Subject: ${j.reply_subject}`,\n    \"\",\n    `${j.reply_body}`,\n    \"\",\n    \"--- END ---\",\n    \"\",\n    \"Decision expected: APPROVE or REVISE.\"\n  ].join(\"\\n\");\n\n  return { json: j };\n});"
+      },
+      "id": "14",
+      "name": "Parse GPT Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3240,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => ({\n  json: {\n    ticket_id: item.json.ticket_id,\n    reply_subject: item.json.reply_subject,\n    reply_body: item.json.reply_body,\n    validator_email_body: item.json.validator_email_body,\n    validation_required: item.json.validation_required,\n    known_case: item.json.known_case\n  }\n}));"
+      },
+      "id": "14p",
+      "name": "Preview Final Draft",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3480,
+        500
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "boolean": [
+            {
+              "value1": "={{ $json.validation_required }}",
+              "operation": "isTrue"
+            }
+          ]
+        }
+      },
+      "id": "15",
+      "name": "IF Human Validation Required?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        3480,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ 'yann@nomiks.io' }}",
+        "toEmail": "={{ 'yann.mastin@gmail.com' }}",
+        "subject": "={{ '[VALIDATION NEEDED] ' + ($json.reply_subject || 'Validator review') }}",
+        "emailType": "text",
+        "message": "={{ $json.validator_email_body || 'No validator draft available yet.' }}"
+      },
+      "id": "16",
+      "name": "Send to Human Validator",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        3720,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "amount": 1,
+        "unit": "seconds"
+      },
+      "id": "17",
+      "name": "Mock Validator Wait",
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1,
+      "position": [
+        3960,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n  j.validator_status = \"approved\";\n  j.validator_comments = \"Mock approval for case study.\";\n  return { json: j };\n});"
+      },
+      "id": "18",
+      "name": "Mock Validator Decision",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4200,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "string": [
+            {
+              "value1": "={{ $json.validator_status }}",
+              "operation": "equal",
+              "value2": "approved"
+            }
+          ]
+        }
+      },
+      "id": "19",
+      "name": "IF Validator Approved?",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [
+        4440,
+        160
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ 'yann@nomiks.io' }}",
+        "toEmail": "={{ 'yann.mastin@gmail.com' }}",
+        "subject": "={{ $json.reply_subject || 'Test customer email' }}",
+        "emailType": "text",
+        "message": "={{ $json.reply_body || 'No draft available yet.' }}"
+      },
+      "id": "20",
+      "name": "Send Final Customer Email (Mock)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        4680,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n  j.mock_delivery_status = \"sent_after_validation\";\n  return { json: j };\n});"
+      },
+      "id": "21",
+      "name": "Mark Validated Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4920,
+        120
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n  j.mock_delivery_status = \"blocked_waiting_validator_revision\";\n  return { json: j };\n});"
+      },
+      "id": "22",
+      "name": "Mark Validator Revision Needed",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        4680,
+        220
+      ]
+    },
+    {
+      "parameters": {
+        "fromEmail": "={{ 'yann@nomiks.io' }}",
+        "toEmail": "={{ 'yann.mastin@gmail.com' }}",
+        "subject": "={{ $json.reply_subject || 'Known case test email' }}",
+        "emailType": "text",
+        "message": "={{ $json.reply_body || 'No draft available yet.' }}"
+      },
+      "id": "23",
+      "name": "Send Direct Customer Email (Known Case)",
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2,
+      "position": [
+        3720,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n  j.mock_delivery_status = \"sent_direct_known_case\";\n  return { json: j };\n});"
+      },
+      "id": "24",
+      "name": "Mark Direct Known Case Delivery",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        3960,
+        360
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "return items.map(item => {\n  const j = item.json;\n  j.audit = {\n    workflow_scope: \"email_only_single_demo\",\n    demo_selected: j.demo_selected || false,\n    demo_selection_reason: j.demo_selection_reason || \"\",\n    issue_family: j.issue_family,\n    opportunity_name: j.opportunity_name,\n    route_queue: j.route_queue,\n    route_owner: j.route_owner,\n    ticket_priority_score: j.ticket_priority_score,\n    kb_match_found: j.kb_match_found,\n    kb_id: j.kb_id,\n    known_case: j.known_case,\n    validation_required: j.validation_required,\n    validator_status: j.validator_status || \"not_needed\",\n    final_delivery_status: j.mock_delivery_status || \"not_sent\",\n    customer_email_original: j.customer_email,\n    mock_recipient_email: \"yann.mastin@gmail.com\",\n    validator_email: \"yann.mastin@gmail.com\"\n  };\n  return { json: j };\n});"
+      },
+      "id": "25",
+      "name": "Build Audit Row",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5160,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "jsCode": "const rows = items.map(i => i.json);\nconst processed = rows.filter(x => x.workflow_scope !== \"excluded_non_email\");\nconst excluded = rows.filter(x => x.workflow_scope === \"excluded_non_email\");\nconst htmlDashboard = `\n  <html>\n    <body style=\"font-family: Arial, sans-serif; padding: 16px;\">\n      <h2>Single Email Demo Summary</h2>\n      <div style=\"display:flex; gap:16px; margin-bottom:16px;\">\n        <div style=\"padding:12px; border:1px solid #ddd; border-radius:8px;\"><strong>Processed email rows</strong><br/>${processed.length}</div>\n        <div style=\"padding:12px; border:1px solid #ddd; border-radius:8px;\"><strong>Excluded rows</strong><br/>${excluded.length}</div>\n      </div>\n      <h3>Selected ticket</h3>\n      <pre>${JSON.stringify(processed[0] ? {\n        ticket_id: processed[0].ticket_id,\n        subject: processed[0].subject,\n        issue_family: processed[0].issue_family,\n        score: processed[0].ticket_priority_score,\n        route_queue: processed[0].route_queue,\n        known_case: processed[0].known_case,\n        validation_required: processed[0].validation_required,\n        delivery_status: processed[0].mock_delivery_status,\n        reply_subject: processed[0].reply_subject,\n        reply_body: processed[0].reply_body\n      } : {}, null, 2)}</pre>\n    </body>\n  </html>\n`;\nreturn [{\n  json: {\n    workflow_name: \"Finary - Single Email Demo + KB + GPT + Merge + Full Email Content v7\",\n    upload_instructions: {\n      endpoint_path: \"/webhook/finary-single-email-demo-gpt-merge-v7\",\n      expected_binary_field: \"data\",\n      upload_method: \"Send the Excel file as multipart/form-data with the file field named data.\"\n    },\n    notes: {\n      select_openai_credential_in_gpt_node: true,\n      select_email_credential_in_all_3_email_nodes: true,\n      validator_receives_exact_client_draft_first: true,\n      after_approval_same_draft_is_sent_to_client: true\n    },\n    selected_email_result: processed[0] || {},\n    visual_outputs: { html_dashboard: htmlDashboard },\n    excluded_rows_count: excluded.length\n  }\n}];"
+      },
+      "id": "26",
+      "name": "Build Visual Summary",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        5400,
+        260
+      ]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {}
+      },
+      "id": "27",
+      "name": "Respond to Webhook",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [
+        5640,
+        260
+      ]
+    }
+  ],
+  "connections": {
+    "Webhook Upload Trigger": {
+      "main": [
+        [
+          {
+            "node": "Excel Binary to JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Excel Binary to JSON": {
+      "main": [
+        [
+          {
+            "node": "Normalize Rows",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Normalize Rows": {
+      "main": [
+        [
+          {
+            "node": "IF Channel is Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Channel is Email": {
+      "main": [
+        [
+          {
+            "node": "Select Single Demo Email",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Non-Email Excluded",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Non-Email Excluded": {
+      "main": [
+        [
+          {
+            "node": "Build Visual Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Select Single Demo Email": {
+      "main": [
+        [
+          {
+            "node": "Classify Opportunity",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Classify Opportunity": {
+      "main": [
+        [
+          {
+            "node": "Build Ticket Scores",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Ticket Scores": {
+      "main": [
+        [
+          {
+            "node": "Compute Routing Score",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Compute Routing Score": {
+      "main": [
+        [
+          {
+            "node": "Query Fake Knowledge Base",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Query Fake Knowledge Base": {
+      "main": [
+        [
+          {
+            "node": "Build GPT Prompt",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build GPT Prompt": {
+      "main": [
+        [
+          {
+            "node": "Build OpenAI Payload",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build OpenAI Payload": {
+      "main": [
+        [
+          {
+            "node": "Draft Reply with GPT",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Merge Original + GPT Response",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Draft Reply with GPT": {
+      "main": [
+        [
+          {
+            "node": "Merge Original + GPT Response",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Merge Original + GPT Response": {
+      "main": [
+        [
+          {
+            "node": "Parse GPT Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse GPT Draft": {
+      "main": [
+        [
+          {
+            "node": "IF Human Validation Required?",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preview Final Draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Human Validation Required?": {
+      "main": [
+        [
+          {
+            "node": "Send to Human Validator",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send Direct Customer Email (Known Case)",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send to Human Validator": {
+      "main": [
+        [
+          {
+            "node": "Mock Validator Wait",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Validator Wait": {
+      "main": [
+        [
+          {
+            "node": "Mock Validator Decision",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mock Validator Decision": {
+      "main": [
+        [
+          {
+            "node": "IF Validator Approved?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "IF Validator Approved?": {
+      "main": [
+        [
+          {
+            "node": "Send Final Customer Email (Mock)",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Mark Validator Revision Needed",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Final Customer Email (Mock)": {
+      "main": [
+        [
+          {
+            "node": "Mark Validated Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Validated Delivery": {
+      "main": [
+        [
+          {
+            "node": "Build Audit Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send Direct Customer Email (Known Case)": {
+      "main": [
+        [
+          {
+            "node": "Mark Direct Known Case Delivery",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Direct Known Case Delivery": {
+      "main": [
+        [
+          {
+            "node": "Build Audit Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Mark Validator Revision Needed": {
+      "main": [
+        [
+          {
+            "node": "Build Audit Row",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Audit Row": {
+      "main": [
+        [
+          {
+            "node": "Build Visual Summary",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Build Visual Summary": {
+      "main": [
+        [
+          {
+            "node": "Respond to Webhook",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "versionId": "7"
+}
